@@ -540,7 +540,8 @@ class MainActivity : AppCompatActivity() {
                     error: WebResourceError?
                 ) {
                     super.onReceivedError(view, request, error)
-                    view?.reload()
+                    //view?.reload()    //not using the reload as it crashes for videos without autoplay
+                    Log.e("crash","Reloading...")
                 }
             }
             webView.settings.javaScriptEnabled = true
@@ -640,20 +641,38 @@ class MainActivity : AppCompatActivity() {
             startImageTimer()
         }
     }
-
+    
     private fun pauseAction() {
         if (useWebView) {
-            // Simulate a key press
             webView.requestFocus()
-            val event = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE)
-            dispatchKeyEvent(event)
+
+            // Executing JavaScript to find the video element and toggle its play/pause state
+            webView.evaluateJavascript("""
+                (function() {
+                    // Try to find the first video element on the page
+                    var video = document.querySelector('video');
+                    if (video) {
+                        if (video.paused) {
+                            video.play(); // If paused, play it
+                        } else {
+                            video.pause(); // If playing, pause it
+                        }
+                        // Return the current state for logging/debugging (optional)
+                        return video.paused ? 'paused' : 'playing';
+                    }
+                    return 'no_video_found'; // No video element found
+                })();
+            """) { result ->
+                // This receives the result from the JavaScript execution
+                Log.d("WebViewVideoControl", "Video toggle result: $result")
+            }
         } else {
             zoomAnimator?.cancel()
             if (isImageTimerRunning) {
-                stopImageTimer()
+                stopImageTimer() // Pause the image slideshow
             } else {
-                getNextImage()
-                startImageTimer()
+                getNextImage() // Get the next image
+                startImageTimer() // Resume the image slideshow
             }
         }
     }
@@ -672,6 +691,7 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
+                //Select Button - Android and Amazon Firestick remote
                 KeyEvent.KEYCODE_DPAD_CENTER -> {
                     pauseAction()
                     return true
