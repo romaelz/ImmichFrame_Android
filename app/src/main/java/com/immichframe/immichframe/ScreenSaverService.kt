@@ -17,6 +17,7 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -72,7 +73,7 @@ class ScreenSaverService : DreamService() {
     override fun onDreamingStarted() {
         super.onAttachedToWindow()
         isFullscreen = true
-        isInteractive = false
+        isInteractive = true
         setContentView(R.layout.screen_saver_view)
         webView = findViewById(R.id.webView)
         webView.setBackgroundColor(Color.BLACK)
@@ -400,6 +401,8 @@ class ScreenSaverService : DreamService() {
         txtPhotoInfo.visibility = View.GONE //enabled in onSettingsLoaded based on server settings
         txtDateTime.visibility = View.GONE //enabled in onSettingsLoaded based on server settings
 
+        webView.settings.mediaPlaybackRequiresUserGesture = false
+
         if (useWebView) {
             savedUrl = if (authSecret.isNotEmpty()) {
                 Uri.parse(savedUrl)
@@ -433,7 +436,8 @@ class ScreenSaverService : DreamService() {
                     error: WebResourceError?
                 ) {
                     super.onReceivedError(view, request, error)
-                    view?.reload()
+                    //Do not reload on error
+                    //view?.reload()
                 }
             }
             webView.settings.javaScriptEnabled = true
@@ -531,5 +535,55 @@ class ScreenSaverService : DreamService() {
             }
         }
         wakeLock = null
+    }
+
+    //Accepting user interaction - SELECT button on the remote.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                //Select Button - Android and Amazon Firestick remote
+                KeyEvent.KEYCODE_DPAD_CENTER -> {
+                    toggleVideoPlay()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+    
+    //Play/Pause the video.
+    private fun toggleVideoPlay() {
+        if (useWebView) {
+            webView.requestFocus()
+
+            // Executing JavaScript to find the video element and toggle its play/pause state
+            webView.evaluateJavascript("""
+                (function() {
+                    // Try to find the first video element on the page
+                    var video = document.querySelector('video');
+                    if (video) {
+                        if (video.paused) {
+                            video.play(); // If paused, play it
+                        } else {
+                            video.pause(); // If playing, pause it
+                        }
+                        // Return the current state for logging/debugging (optional)
+                        return video.paused ? 'paused' : 'playing';
+                    }
+                    return 'no_video_found'; // No video element found
+                })();
+            """) { result ->
+                // This receives the result from the JavaScript execution
+                Log.d("WebViewVideoControl", "Video toggle result: $result")
+            }
+        } else {
+            zoomAnimator?.cancel()
+            if (isImageTimerRunning) {
+                stopImageTimer() // Pause the image slideshow
+            } else {
+                getNextImage() // Get the next image
+                startImageTimer() // Resume the image slideshow
+            }
+        }
     }
 }
